@@ -1,0 +1,110 @@
+service: sales-api-again
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs14.x
+  region: ap-northeast-2
+  # 람다 함수에 권한 추가
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - 'sns:Publish'
+          Resource:
+            - !Ref ProduceTopic
+      managedPolicies:
+              - 'arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole'
+custom:
+  env: ${file(./.env.yaml)}
+
+functions:
+  # 구매 요청 람다
+  purchase:
+    handler: product-purchase-handler.handler
+    events:
+      - httpApi:
+          method: GET
+          path: /product/donut
+      - httpApi:
+          method: POST
+          path: /checkout
+    environment:
+      DB_USERNAME : ${self:custom.env.DB_USERNAME}
+      DATABASE    : ${self:custom.env.DATABASE}
+      HOSTNAME    : ${self:custom.env.HOSTNAME}
+      PORT        : ${self:custom.env.PORT}
+      PASSWORD    : ${self:custom.env.PASSWORD}
+      TOPIC_ARN   : !Ref ProduceTopic
+  # 생산 요청 람다
+  productRequest:
+    handler: product-request-handler.handler
+    timeout: 3
+    events:
+      - sqs:
+          arn: !GetAtt ProduceQueue.Arn
+    environment:
+      PRODUCT_UPDATE_URL : !GetAtt HttpApi.ApiEndpoint
+  # 생산 값 업데이트
+  productUpdate:
+    handler: stock-increase-handler.handler
+    events:
+      - httpApi:
+          method: POST
+          path: /product/donut
+    environment:
+      DB_USERNAME : ${self:custom.env.DB_USERNAME}
+      DATABASE    : ${self:custom.env.DATABASE}
+      HOSTNAME    : ${self:custom.env.HOSTNAME}
+      PORT        : ${self:custom.env.PORT}
+      PASSWORD    : ${self:custom.env.PASSWORD}
+
+resources:
+  Resources:
+    # SNS 로부터 메세지를 받는 SQS
+    ProduceQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: "ProduceQueue"
+        VisibilityTimeout: 4
+        RedrivePolicy:
+          deadLetterTargetArn:
+            Fn::GetAtt:
+              - "ProduceDLQ"
+              - "Arn"
+          maxReceiveCount: 5
+    SampleSQSPolicy:
+      Type: AWS::SQS::QueuePolicy
+      Properties:
+        Queues:
+          - !Ref ProduceQueue
+        PolicyDocument:
+          Statement:
+            -
+              Principal:
+                AWS: "*"
+              Action:
+                - "SQS:SendMessage"
+              Effect: "Allow"
+              Resource: !GetAtt ProduceQueue.Arn
+              Condition:
+                ArnLike:
+                  aws:SourceArn: !Ref ProduceTopic
+    # DLQ
+    ProduceDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: "ProduceDLQ"
+
+    #
+    ProduceTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: ProduceTopic
+    SnsSubscription:
+      Type: AWS::SNS::Subscription
+      Properties:
+        Protocol: sqs
+        Endpoint: !GetAtt ProduceQueue.Arn
+        TopicArn: !Ref ProduceTopic

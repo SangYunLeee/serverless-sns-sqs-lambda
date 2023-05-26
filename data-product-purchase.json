@@ -1,0 +1,9 @@
+
+{
+  "resource": "/",
+  "path": "/checkout",
+  "httpMethod": "POST",
+  "body": {
+    "count": 100
+  }
+}

@@ -1,0 +1,10 @@
+
+{
+  "resource": "/",
+  "path": "/product/donut",
+  "httpMethod": "POST",
+  "body": {
+    "count": 2000,
+    "factoryId": "0xbe6cec53fa9511ed89230aebfd403c0e"
+  }
+}
