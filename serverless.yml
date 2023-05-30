@@ -17,7 +17,7 @@ provider:
       managedPolicies:
               - 'arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole'
 custom:
-  env: ${file(./.env.yaml)}
+  env: ${file(./env.yaml)}
 
 functions:
   # 구매 요청 람다
